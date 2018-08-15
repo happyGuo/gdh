@@ -11,6 +11,7 @@ import (
 
 	"gdhMQ/internal/protocol"
 	"gdhMQ/internal/util"
+	"strings"
 )
 
 type GDHD struct {
@@ -25,7 +26,8 @@ type GDHD struct {
 	errValue  atomic.Value
 	startTime time.Time
 
-	
+	topicMap map[string]*Topic
+
 
 	lookupPeers atomic.Value
 
@@ -68,4 +70,60 @@ func New() *GDHD  {
 	}
 
 	return g
+}
+
+// GetTopic performs a thread safe operation
+// to return a pointer to a Topic object (potentially new)
+func (n *GDHD) GetTopic(topicName string) *Topic {
+	// most likely, we already have this topic, so try read lock first.
+	n.RLock()
+	t, ok := n.topicMap[topicName]
+	n.RUnlock()
+	if ok {
+		return t
+	}
+
+	n.Lock()
+
+	t, ok = n.topicMap[topicName]
+	if ok {
+		n.Unlock()
+		return t
+	}
+
+	t = NewTopic(topicName, &context{n})
+	n.topicMap[topicName] = t
+
+	n.Unlock()
+
+	// topic is created but messagePump not yet started
+
+	// if loading metadata at startup, no lookupd connections yet, topic started after load
+	if atomic.LoadInt32(&n.isLoading) == 1 {
+		return t
+	}
+
+	// now that all channels are added, start topic messagePump
+	t.Start()
+	return t
+}
+
+
+func (n *GDHD) Notify(v interface{}) {
+	// since the in-memory metadata is incomplete,
+	// should not persist metadata while loading it.
+	// nsqd will call `PersistMetadata` it after loading
+	persist := atomic.LoadInt32(&n.isLoading) == 0
+	n.waitGroup.Wrap(func() {
+		// by selecting on exitChan we guarantee that
+		// we do not block exit, see issue #123
+		select {
+		case <-n.exitChan:
+		case n.notifyChan <- v:
+			if !persist {
+				return
+			}
+
+		}
+	})
 }
