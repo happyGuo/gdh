@@ -6,7 +6,11 @@ import (
 	"time"
 	"net"
 	"crypto/tls"
-	"gdhMQ/widgets"
+	"os"
+	"log"
+
+	"gdhMQ/internal/protocol"
+	"gdhMQ/internal/util"
 )
 
 type GDHD struct {
@@ -21,7 +25,7 @@ type GDHD struct {
 	errValue  atomic.Value
 	startTime time.Time
 
-	topicMap map[string]*Topic
+	
 
 	lookupPeers atomic.Value
 
@@ -35,6 +39,33 @@ type GDHD struct {
 	notifyChan           chan interface{}
 	optsNotificationChan chan struct{}
 	exitChan             chan int
-	waitGroup            widgets.WaitGroupWrapper
+	waitGroup            util.WaitGroupWrapper
 
+}
+
+func (g *GDHD) Entry(){
+	var err error
+	addr := "0.0.0.0:8848"
+	ctx := &context{g}
+	g.tcpListener, err = net.Listen("tcp", addr,)
+	if err != nil {
+		log.Printf("listen (%s) failed - %s",addr,err)
+		os.Exit(1)
+	}
+	tcpServer := &tcpServer{ctx: ctx}
+	g.waitGroup.Wrap(func() {
+		protocol.TCPServer(g.tcpListener, tcpServer)
+	})
+
+}
+
+func New() *GDHD  {
+	g := &GDHD{
+		startTime:            time.Now(),
+		exitChan:             make(chan int),
+		notifyChan:           make(chan interface{}),
+		optsNotificationChan: make(chan struct{}, 1),
+	}
+
+	return g
 }

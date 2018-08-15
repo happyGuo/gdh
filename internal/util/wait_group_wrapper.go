@@ -1,7 +1,8 @@
-package widgets
+package util
 
-import "sync"
-
+import (
+	"sync"
+)
 
 type WaitGroupWrapper struct {
 	sync.WaitGroup
@@ -14,4 +15,3 @@ func (w *WaitGroupWrapper) Wrap(cb func()) {
 		w.Done()
 	}()
 }
-

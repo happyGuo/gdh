@@ -4,22 +4,16 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"fmt"
 	"gdhMQ/servers/gdhd"
 )
 
-type program struct {
-	gdhd *gdhd.GDHD
-}
-
 func main()  {
 
-
+	g := gdhd.New()
+	g.Entry()
 	var s = make(chan os.Signal, 1)
-	signal.Notify(s, syscall.SIGKILL)
-	for {
-		cmd := <-s
-		if cmd == syscall.SIGKILL {
-			break
-		}
-	}
+	signal.Notify(s, syscall.SIGKILL, syscall.SIGTERM)
+	fmt.Println(os.Getpid())
+	<-s
 }
